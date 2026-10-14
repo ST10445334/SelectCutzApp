@@ -1,0 +1,81 @@
+# Azure DevOps pipeline for SELECT CUTZ - mirrors .github/workflows/ci.yml.
+# Setup: Pipelines > New pipeline > GitHub (or Azure Repos) > Existing YAML file > azure-pipelines.yml
+# Builds a DEBUG APK (no keystore needed). Optional pipeline variable API_BASE_URL (e.g. https://your-domain.co.za/api).
+# Signed release builds: see docs/CI_CD_AND_INTEGRATION.md (needs a keystore uploaded under Pipelines > Library).
+trigger:
+  branches:
+    include: [main, develop, feature/*]
+pr:
+  branches:
+    include: [main, develop]
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  NODE_VERSION: '24.x'
+
+stages:
+  - stage: Web
+    displayName: Lint, unit tests, build
+    jobs:
+      - job: web
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: $(NODE_VERSION) }
+          - script: npm ci
+            displayName: Install
+          - script: npm run lint
+            displayName: Lint
+          - script: npm run test:ci
+            displayName: Unit tests
+          - script: npm run build
+            displayName: Build
+          - publish: www
+            artifact: www
+
+  - stage: Api
+    displayName: API end-to-end tests
+    dependsOn: []
+    jobs:
+      - job: api
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: $(NODE_VERSION) }
+          - script: |
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq php-cli php-mysql mariadb-server
+              sudo service mariadb start
+              sudo mariadb -e "CREATE USER 'ci'@'127.0.0.1' IDENTIFIED BY 'ci'; GRANT ALL ON *.* TO 'ci'@'127.0.0.1' WITH GRANT OPTION;"
+            displayName: Install PHP + MariaDB
+          - script: find backend -name '*.php' -print0 | xargs -0 -n1 php -l
+            displayName: PHP syntax check
+          - script: bash tests/api/run-local.sh
+            displayName: API end-to-end tests
+            env: { DB_HOST: 127.0.0.1, DB_USER: ci, DB_PASS: ci }
+          - publish: docs/evidence/api-e2e-results.md
+            artifact: api-e2e-evidence
+            condition: always()
+
+  - stage: Android
+    displayName: Android APK
+    dependsOn: [Web, Api]
+    jobs:
+      - job: apk
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: $(NODE_VERSION) }
+          - task: JavaToolInstaller@0
+            inputs: { versionSpec: '21', jdkArchitectureOption: x64, jdkSourceOption: PreInstalled }
+          - script: npm ci
+            displayName: Install
+          - script: node scripts/set-api-url.mjs "$(API_BASE_URL)"
+            displayName: Set hosted API URL
+            condition: ne(variables['API_BASE_URL'], '')
+          - script: npm run android:sync
+            displayName: Build web + sync to Android
+          - script: cd android && ./gradlew assembleDebug --no-daemon
+            displayName: Debug APK
+            env: { VERSION_CODE: $(Build.BuildId) }
+          - publish: android/app/build/outputs/apk/debug/app-debug.apk
+            artifact: selectcutz-debug-apk
