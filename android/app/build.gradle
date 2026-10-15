@@ -15,7 +15,7 @@ android {
         applicationId "za.co.selectcutz.app"
         minSdkVersion 24
         targetSdkVersion 36
-        versionCode (System.getenv('VERSION_CODE') ?: '1').toInteger()
+        versionCode((System.getenv('VERSION_CODE') ?: '1').toInteger())
         versionName System.getenv('VERSION_NAME') ?: "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
