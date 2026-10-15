@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web - lint, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with: { name: www, path: www, retention-days: 14 }
+
+  api:
+    name: API - PHP lint + end-to-end tests (real MariaDB)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env: { MARIADB_ROOT_PASSWORD: root }
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASS: root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.3', extensions: mysqli, gd }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: PHP syntax check
+        run: find backend -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: API end-to-end tests
+        run: bash tests/api/run-local.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: api-e2e-evidence, path: docs/evidence/api-e2e-results.md }
+
+  android:
+    name: Android - debug APK (and signed release when secrets exist)
+    needs: [web, api]
+    runs-on: ubuntu-latest
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - name: Point the app at the hosted API (repository variable API_BASE_URL, optional)
+        if: ${{ vars.API_BASE_URL != '' }}
+        run: node scripts/set-api-url.mjs "${{ vars.API_BASE_URL }}"
+      - run: npm run android:sync
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with: { name: selectcutz-debug-apk, path: android/app/build/outputs/apk/debug/app-debug.apk }
+      - name: Build signed release APK
+        if: ${{ github.ref == 'refs/heads/main' && env.KEYSTORE_B64 != '' }}
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.jks" ./gradlew assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.ref == 'refs/heads/main' && env.KEYSTORE_B64 != '' }}
+        with: { name: selectcutz-release-apk, path: android/app/build/outputs/apk/release/*.apk }

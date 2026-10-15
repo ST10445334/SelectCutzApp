@@ -1,0 +1,24 @@
+<app-site-header></app-site-header>
+<ion-content>
+  <main class="page">
+    <h1 class="title">Our Gallery</h1>
+    <p class="intro">A look at recent work from SELECT CUTZ.</p>
+
+    <div class="message" *ngIf="loading">Loading gallery...</div>
+    <div class="message error" role="alert" *ngIf="!loading && error">
+      {{ error }} <button type="button" class="retry" (click)="load()">Try again</button>
+    </div>
+    <p class="message" *ngIf="!loading && !error && !items.length">No gallery images yet. Please check back soon.</p>
+
+    <div class="grid" *ngIf="!loading && !error && items.length">
+      <figure class="tile" *ngFor="let item of items">
+        <img [src]="imageUrl(item.ImagePath)" [alt]="item.Title" loading="lazy" decoding="async" (error)="imageError($event)">
+        <figcaption>
+          <strong>{{ item.Title }}</strong>
+          <span *ngIf="item.Caption">{{ item.Caption }}</span>
+        </figcaption>
+      </figure>
+    </div>
+  </main>
+  <app-site-footer></app-site-footer>
+</ion-content>

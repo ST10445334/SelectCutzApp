@@ -1,0 +1,6 @@
+.preview-wrap { display:flex; align-items:center; gap:12px; color:#555; }
+.preview-wrap img { width:120px; height:90px; object-fit:cover; border-radius:8px; }
+.gallery-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:16px; }
+.gallery-grid figure { margin:0; padding:10px; }
+.gallery-grid img { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:8px; }
+figcaption { display:flex; flex-direction:column; gap:4px; padding-top:8px; }

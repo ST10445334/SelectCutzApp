@@ -1,0 +1,159 @@
+# SELECT CUTZ - Azure DevOps pipeline that UPLOADS to GitHub.
+#
+# What it does (run it manually from Pipelines > Run pipeline):
+#   1. Build      : npm ci, lint, unit tests, production build, (optional) debug APK
+#   2. PushSource : pushes this repo's code to a branch of a GitHub repo
+#   3. Release    : (optional) creates a GitHub Release and attaches the APK
+#
+# One-time setup is in AZURE_TO_GITHUB_SETUP.md.
+# Needs:  secret pipeline variable  GITHUB_PAT   (GitHub token with "repo" / Contents: write)
+#         for the optional release: a GitHub service connection (name set in parameter githubConnection)
+
+trigger: none   # manual only, so it never pushes by surprise. Change to [main] to publish on every commit.
+pr: none
+
+parameters:
+  - name: githubRepo
+    displayName: GitHub repo to upload to (owner/name)
+    type: string
+    default: ST10445334/SelectCutzApp
+  - name: githubBranch
+    displayName: Branch on GitHub to push to
+    type: string
+    default: main
+  - name: forcePush
+    displayName: Force push (overwrites the GitHub branch - only if you know you need it)
+    type: boolean
+    default: false
+  - name: buildApk
+    displayName: Also build the debug APK
+    type: boolean
+    default: true
+  - name: createRelease
+    displayName: Attach the APK to a GitHub Release (needs the GitHub service connection)
+    type: boolean
+    default: false
+  - name: githubConnection
+    displayName: Name of the GitHub service connection (only used for the Release)
+    type: string
+    default: github-selectcutz
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  NODE_VERSION: '24.x'
+
+stages:
+  # ---------------------------------------------------------------- 1. BUILD
+  - stage: Build
+    displayName: Build and test
+    jobs:
+      - job: web
+        displayName: Lint, unit tests, web build
+        steps:
+          - task: UseNode@1
+            inputs: { version: $(NODE_VERSION) }
+          - script: npm ci
+            displayName: Install
+          - script: npm run lint
+            displayName: Lint
+          - script: npm run test:ci
+            displayName: Unit tests
+          - script: npm run build
+            displayName: Build
+          - publish: www
+            artifact: www
+
+      - ${{ if eq(parameters.buildApk, true) }}:
+        - job: apk
+          displayName: Debug APK
+          dependsOn: web
+          steps:
+            - task: UseNode@1
+              inputs: { version: $(NODE_VERSION) }
+            - task: JavaToolInstaller@0
+              inputs: { versionSpec: '21', jdkArchitectureOption: x64, jdkSourceOption: PreInstalled }
+            - script: npm ci
+              displayName: Install
+            - script: node scripts/set-api-url.mjs "$(API_BASE_URL)"
+              displayName: Set hosted API URL
+              condition: ne(variables['API_BASE_URL'], '')
+            - script: npm run android:sync
+              displayName: Build web + sync to Android
+            - script: chmod +x android/gradlew
+              displayName: Make gradlew executable
+            - script: cd android && ./gradlew assembleDebug --no-daemon
+              displayName: Gradle assembleDebug
+              env: { VERSION_CODE: $(Build.BuildId) }
+            - publish: android/app/build/outputs/apk/debug/app-debug.apk
+              artifact: selectcutz-debug-apk
+
+  # ------------------------------------------------------- 2. PUSH TO GITHUB
+  - stage: PushSource
+    displayName: Push code to GitHub
+    dependsOn: Build
+    jobs:
+      - job: push
+        displayName: git push to GitHub
+        steps:
+          - checkout: self
+            fetchDepth: 0            # full history so the push is a normal fast-forward
+            persistCredentials: false
+
+          - bash: |
+              set -euo pipefail
+              if [ -z "${GITHUB_PAT:-}" ]; then
+                echo "##vso[task.logissue type=error]Secret variable GITHUB_PAT is not set. See AZURE_TO_GITHUB_SETUP.md step 2."
+                exit 1
+              fi
+
+              if [ "${BUILD_REPOSITORY_PROVIDER:-}" = "GitHub" ] && [ "${BUILD_REPOSITORY_NAME,,}" = "${GITHUB_REPO,,}" ]; then
+                echo "##vso[task.logissue type=warning]This pipeline's source repo IS ${GITHUB_REPO} on GitHub, so there is nothing to upload. Skipping the push. To mirror code into GitHub, run this pipeline from an Azure Repos repo."
+                exit 0
+              fi
+
+              git config user.name  "Azure DevOps"
+              git config user.email "azure-devops@selectcutz.local"
+
+              # Token goes in via env var, never echoed. Azure masks secret variables in logs.
+              git remote add github "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPO}.git"
+
+              FORCE=""
+              if [ "${FORCE_PUSH}" = "True" ] || [ "${FORCE_PUSH}" = "true" ]; then FORCE="--force"; fi
+
+              echo "Pushing ${BUILD_SOURCEVERSION:0:8} to ${GITHUB_REPO}@${GITHUB_BRANCH}"
+              git push $FORCE github "HEAD:refs/heads/${GITHUB_BRANCH}"
+            displayName: Push to GitHub
+            env:
+              GITHUB_PAT: $(GITHUB_PAT)
+              GITHUB_REPO: ${{ parameters.githubRepo }}
+              GITHUB_BRANCH: ${{ parameters.githubBranch }}
+              FORCE_PUSH: ${{ parameters.forcePush }}
+
+  # --------------------------------------------------- 3. GITHUB RELEASE (APK)
+  - ${{ if and(eq(parameters.buildApk, true), eq(parameters.createRelease, true)) }}:
+    - stage: Release
+      displayName: GitHub Release with APK
+      dependsOn: [Build, PushSource]
+      jobs:
+        - job: release
+          steps:
+            - checkout: none
+            - download: current
+              artifact: selectcutz-debug-apk
+            - task: GitHubRelease@1
+              displayName: Create release and upload APK
+              inputs:
+                gitHubConnection: ${{ parameters.githubConnection }}
+                repositoryName: ${{ parameters.githubRepo }}
+                action: create
+                target: ${{ parameters.githubBranch }}
+                tagSource: userSpecifiedTag
+                tag: build-$(Build.BuildId)
+                title: SELECT CUTZ build $(Build.BuildId)
+                releaseNotesSource: inline
+                releaseNotesInline: Debug APK built by Azure DevOps run $(Build.BuildNumber).
+                assets: $(Pipeline.Workspace)/selectcutz-debug-apk/app-debug.apk
+                isPreRelease: true
+                addChangeLog: false

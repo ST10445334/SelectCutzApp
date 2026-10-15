@@ -1,0 +1,30 @@
+name: Live smoke test (hosted API)
+
+# Read-only checks against the real hosted site: health, services, settings, gallery, CORS, HTTPS, response time.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'API base URL, e.g. https://selectcutz.co.za/api'
+        required: false
+  schedule:
+    - cron: '0 6 * * 1-6'   # 08:00 South African time, Mon-Sat
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Run smoke tests
+        env:
+          BASE_URL: ${{ inputs.base_url || vars.API_BASE_URL }}
+          SMOKE_ONLY: '1'
+          E2E_REPORT: docs/evidence/live-smoke-results.md
+        run: |
+          test -n "$BASE_URL" || { echo "Set the API_BASE_URL repository variable or pass base_url"; exit 1; }
+          node tests/api/api-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: live-smoke-evidence, path: docs/evidence/live-smoke-results.md }

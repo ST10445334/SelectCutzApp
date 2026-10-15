@@ -1,0 +1,26 @@
+# Web checks - 2026-10-12T06:36:47Z - Node v24.21.0
+
+## npm run lint
+
+All files pass linting.
+
+
+## npm run test:ci
+ ✓  app  src/app/booking/booking.page.spec.ts (14 tests) 920ms
+ ✓  app  src/app/dashboard/dashboard.page.spec.ts (7 tests) 346ms
+ ✓  app  src/app/login/login.page.spec.ts (8 tests) 259ms
+ ✓  app  src/app/admin-gallery/admin-gallery.page.spec.ts (5 tests) 114ms
+ ✓  app  src/app/gallery/gallery.page.spec.ts (4 tests) 82ms
+ ✓  app  src/app/services/services.page.spec.ts (1 test) 41ms
+ ✓  app  src/app/app.component.spec.ts (1 test) 50ms
+ ✓  app  src/app/register/register.page.spec.ts (1 test) 162ms
+ ✓  app  src/app/home/home.page.spec.ts (1 test) 22ms
+ ✓  app  src/app/owner/owner.page.spec.ts (1 test) 30ms
+ ✓  app  src/app/core/api.service.spec.ts (7 tests) 21ms
+ Test Files  11 passed (11)
+      Tests  50 passed (50)
+
+## npm run hosting (production build + package)
+                    | Initial total       | 646.89 kB |               147.25 kB
+Application bundle generation complete. [14.048 seconds] - 2026-10-12T06:37:35.366Z
+Hosting package created at hosting-package/

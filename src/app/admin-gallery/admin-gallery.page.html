@@ -1,0 +1,22 @@
+<app-site-header></app-site-header>
+<div class="dashboard-scroll"><div class="dashboard-layout">
+<aside class="side-nav"><h2>Admin</h2><a routerLink="/dashboard">Dashboard</a><a routerLink="/admin/services">Manage Services</a><a class="active" routerLink="/admin/gallery">Gallery</a><a routerLink="/admin/site">Logo & Owner</a><a routerLink="/admin/reports">Reports</a><button type="button" (click)="logout()">Logout</button></aside>
+<main class="dash"><h1>Gallery</h1>
+<div class="alert error" role="alert" *ngIf="error">{{ error }}</div><div class="alert success" *ngIf="message">{{ message }}</div>
+<form class="service-form box" (ngSubmit)="upload()">
+  <label>Title<input [(ngModel)]="model.title" name="title" maxlength="100" required></label>
+  <label>Caption (optional)<input [(ngModel)]="model.caption" name="caption" maxlength="255"></label>
+  <label class="wide">Image (JPG, PNG or WebP, max 5 MB)<input type="file" accept="image/jpeg,image/png,image/webp" (change)="selectImage($event)"></label>
+  <div class="preview-wrap" *ngIf="preview"><img [src]="preview" alt="Selected image preview"><span>Image preview</span></div>
+  <ion-button type="submit" [disabled]="busy">{{ busy ? 'Uploading...' : 'Upload to Gallery' }}</ion-button>
+</form>
+<p class="empty" *ngIf="loading">Loading gallery...</p>
+<div class="gallery-grid" *ngIf="!loading && items.length">
+  <figure class="box" *ngFor="let item of items">
+    <img [src]="imageUrl(item.ImagePath)" [alt]="item.Title" loading="lazy" (error)="imageError($event)">
+    <figcaption><strong>{{ item.Title }}</strong><span *ngIf="item.Caption">{{ item.Caption }}</span>
+      <button class="table-action" type="button" [disabled]="deletingId === +item.GalleryID" (click)="remove(item)">{{ deletingId === +item.GalleryID ? 'Deleting...' : 'Delete' }}</button></figcaption>
+  </figure>
+</div>
+<p class="empty" *ngIf="!loading && !items.length">No gallery images yet.</p>
+</main></div></div>

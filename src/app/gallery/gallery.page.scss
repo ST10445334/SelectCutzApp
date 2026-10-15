@@ -1,0 +1,12 @@
+ion-content { --background:#0b0b0b; }
+.page { padding:45px 20px; max-width:1200px; margin:0 auto; }
+.title { color:#d6a832; text-align:center; margin:0 0 8px; }
+.intro { color:#ccc; text-align:center; margin:0 0 28px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:18px; }
+.tile { margin:0; background:#171717; border:1px solid #333; border-radius:14px; overflow:hidden; }
+.tile img { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; object-position:center 22%; background:#050505; }
+figcaption { padding:12px 14px; color:#ccc; display:flex; flex-direction:column; gap:4px; }
+figcaption strong { color:#fff; }
+.message { background:#171717; color:#ccc; border:1px solid #333; border-radius:12px; padding:18px; text-align:center; }
+.error { background:#401b1b; color:#ffb3b3; }
+.retry { background:transparent; border:0; color:#fff; text-decoration:underline; font-weight:700; cursor:pointer; }
